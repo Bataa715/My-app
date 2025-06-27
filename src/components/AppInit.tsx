@@ -1,19 +1,19 @@
-
 'use client';
 import { useEffect, useRef } from 'react';
-import { requestForToken, setupOnMessageListener, auth, db } from '@/lib/firebase';
+import { auth, db } from '@/lib/firebase';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/contexts/AuthContext';
 import { doc, updateDoc, serverTimestamp, collection, addDoc } from 'firebase/firestore';
 import type { NotificationItem, ItemType } from '@/types';
 import { useTranslation } from '@/hooks/useTranslation';
+import { notificationService } from '@/lib/notificationService';
 
 export default function AppInit() {
   const { toast } = useToast();
   const { user } = useAuth();
   const { t } = useTranslation();
 
-  // This ref tracks if the setup has been performed for the current user's session
+  // This ref tracks if the setup has been completed for the current user's session
   const setupCompletedForUser = useRef<string | null>(null);
 
   useEffect(() => {
@@ -91,60 +91,82 @@ export default function AppInit() {
       }
     };
 
-    // Main logic for FCM setup
-    const initializeFcm = async () => {
+    // Main logic for notification setup
+    const initializeNotifications = async () => {
       // Exit if no user or if setup has already been completed for this user in this session
       if (!user || setupCompletedForUser.current === user.uid) {
+        console.log(`AppInit: Skipping notification setup - ${!user ? 'no user' : 'already completed for user'}`);
         return;
       }
+      
       // Mark setup as in-progress for this user to prevent re-runs
       setupCompletedForUser.current = user.uid;
-      console.log(`AppInit: Running one-time FCM setup for user ${user.uid}.`);
+      console.log(`🔔 AppInit: Starting notification setup for user ${user.uid}`);
+      console.log(`🔔 AppInit: User FCM token from context:`, user.fcmToken ? user.fcmToken.substring(0, 20) + '...' : 'none');
 
       try {
-        const permission = await Notification.requestPermission();
-        if (permission === 'granted') {
-          const fcmToken = await requestForToken();
+        // Initialize notification service
+        console.log('🔔 AppInit: Initializing notification service...');
+        await notificationService.initialize();
+        console.log('✅ AppInit: Notification service initialized');
+        
+        // Wait for FCM token (this will wait for the Capacitor registration to complete)
+        console.log('🔔 AppInit: Waiting for FCM token from Capacitor registration...');
+        const fcmToken = await notificationService.waitForFcmToken(15000); // Wait up to 15 seconds
+        
+        if (fcmToken) {
+          console.log('✅ AppInit: FCM token received from Capacitor');
+          console.log('🔔 AppInit: FCM token preview:', fcmToken.substring(0, 20) + '...');
           
-          // CRITICAL FIX: Only update Firestore if the token is new or has changed.
-          if (fcmToken && fcmToken !== user.fcmToken) {
-            console.log("AppInit: New FCM token found, updating Firestore.");
+          // Update Firestore if token is new or different
+          if (fcmToken !== user.fcmToken) {
+            console.log("✅ AppInit: New FCM token found, updating Firestore");
             const userDocRef = doc(db, "users", user.uid);
             await updateDoc(userDocRef, {
               fcmToken: fcmToken,
               lastTokenUpdate: serverTimestamp()
             });
+            console.log("✅ AppInit: Firestore updated with new FCM token");
+          } else {
+            console.log("ℹ️ AppInit: FCM token unchanged, no update needed");
           }
+        } else {
+          console.log("⚠️ AppInit: No FCM token received within timeout");
+        }
+
+        // Check permission status and show appropriate message
+        const permissionStatus = await notificationService.checkPermission();
+        console.log('🔔 AppInit: Permission status:', permissionStatus);
+        
+        if (permissionStatus === 'denied') {
+          console.log('⚠️ AppInit: Notification permission denied, showing toast');
+          toast({
+            title: t('notificationPermissionDenied'),
+            description: t('notificationPermissionDeniedDesc'),
+            variant: "destructive",
+          });
+        } else if (permissionStatus === 'granted') {
+          console.log("✅ AppInit: Notification permission granted");
+        } else {
+          console.log("ℹ️ AppInit: Notification permission status:", permissionStatus);
         }
       } catch (error) {
-        console.error("AppInit: Error during FCM initialization:", error);
+        console.error("❌ AppInit: Error during notification initialization:", error);
       }
     };
 
-    initializeFcm();
-
-    // Setup foreground listener, it returns an unsubscribe function.
-    let unsubscribe: (() => void) | null = null;
-    const setupListener = async () => {
-        if(user) { // Only set up listener if user is logged in
-            unsubscribe = await setupOnMessageListener(handleIncomingMessage);
-        }
-    };
-    setupListener();
+    initializeNotifications();
 
     // Cleanup function for the useEffect hook
     return () => {
-      if (unsubscribe) {
-        console.log("AppInit: Cleaning up foreground message listener.");
-        unsubscribe();
-      }
       // When the user logs out (user object becomes null), we reset the ref
       // so that the setup can run again for the next user who logs in.
       if (!user) {
+        console.log('AppInit: User logged out, resetting setup tracking');
         setupCompletedForUser.current = null;
       }
     };
-  }, [user, t, toast]); // Dependency array is correct.
+  }, [user, toast, t]);
 
   return null;
 }

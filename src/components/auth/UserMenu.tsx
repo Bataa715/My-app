@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from 'next/link';
@@ -29,24 +28,26 @@ export function UserMenu({ user }: UserMenuProps) {
   const [isDarkMode, setIsDarkMode] = useState(false);
 
   useEffect(() => {
-    const currentTheme = localStorage.getItem('theme');
+    const currentTheme = typeof window !== 'undefined' ? localStorage.getItem('theme') : null;
     if (currentTheme === 'dark') {
       setIsDarkMode(true);
-      document.documentElement.classList.add('dark');
+      if (typeof document !== 'undefined') document.documentElement.classList.add('dark');
     } else {
       setIsDarkMode(false);
-      document.documentElement.classList.remove('dark');
+      if (typeof document !== 'undefined') document.documentElement.classList.remove('dark');
     }
   }, []);
 
   const toggleDarkMode = (checked: boolean) => {
     setIsDarkMode(checked);
-    if (checked) {
-      document.documentElement.classList.add('dark');
-      localStorage.setItem('theme', 'dark');
-    } else {
-      document.documentElement.classList.remove('dark');
-      localStorage.setItem('theme', 'light');
+    if (typeof document !== 'undefined') {
+      if (checked) {
+        document.documentElement.classList.add('dark');
+        if (typeof window !== 'undefined') localStorage.setItem('theme', 'dark');
+      } else {
+        document.documentElement.classList.remove('dark');
+        if (typeof window !== 'undefined') localStorage.setItem('theme', 'light');
+      }
     }
   };
 

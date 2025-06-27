@@ -1,4 +1,3 @@
-
 "use client";
 
 import { usePathname, useRouter } from "next/navigation";
@@ -8,6 +7,7 @@ import { CityProvider } from "@/contexts/CityContext";
 import { SearchProvider } from "@/contexts/SearchContext";
 import React, { useEffect, useRef } from "react";
 import AppInit from "@/components/AppInit";
+import NotificationPermissionRequest from "@/components/NotificationPermissionRequest";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -54,6 +54,7 @@ const ProtectedAppView = ({ children }: { children: React.ReactNode }) => {
           "flex-1 container pt-2 pb-24 md:pb-6"
         )}
       >
+        <NotificationPermissionRequest />
         {children}
       </main>
       <BottomNav />

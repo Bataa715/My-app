@@ -1,4 +1,3 @@
-
 'use client';
 import { useEffect, useState } from 'react';
 import { doc, getDoc } from 'firebase/firestore';
@@ -90,7 +89,9 @@ export function VersionCheck() {
   }, []);
 
   const handleUpdate = () => {
-    window.location.reload();
+    if (typeof window !== "undefined") {
+      window.location.reload();
+    }
   };
 
   const handleClose = () => {

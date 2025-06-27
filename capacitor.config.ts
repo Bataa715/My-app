@@ -5,6 +5,11 @@ const config: CapacitorConfig = {
   appName: 'Mongol',
   webDir: 'out',
   bundledWebRuntime: false,
+  plugins: {
+    PushNotifications: {
+      presentationOptions: ["badge", "sound", "alert"]
+    }
+  }
 };
 
 export default config;

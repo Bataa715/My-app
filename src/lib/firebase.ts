@@ -1,4 +1,3 @@
-
 // lib/firebase.ts
 import { initializeApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
@@ -11,7 +10,7 @@ import {
   isSupported as isMessagingSupported,
   type Messaging
 } from 'firebase/messaging';
-import { getStorage, type Storage } from 'firebase/storage';
+import { getStorage, type FirebaseStorage } from 'firebase/storage';
 
 const firebaseConfig = {
   apiKey: "AIzaSyC8fm6JfwUqtr_YBpg01hxo6JKAQQ8kgPc",
@@ -28,7 +27,7 @@ console.log("Firebase App initialized");
 
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
-const storage: Storage = getStorage(app);
+const storage: FirebaseStorage = getStorage(app);
 console.log("Auth, Firestore, and Storage initialized");
 
 let analytics: Analytics | undefined;
@@ -52,20 +51,26 @@ let messagingPromise: Promise<Messaging | null> | null = null;
 
 const getInitializedMessaging = (): Promise<Messaging | null> => {
     if (messagingSingleton) {
+        console.log("Firebase.ts: Returning existing messaging instance");
         return Promise.resolve(messagingSingleton);
     }
     if (messagingPromise) {
+        console.log("Firebase.ts: Returning existing messaging promise");
         return messagingPromise;
     }
 
+    console.log("Firebase.ts: Creating new messaging promise");
     messagingPromise = new Promise(async (resolve) => {
         if (typeof window !== 'undefined') {
             try {
+                console.log("Firebase.ts: Checking if messaging is supported...");
                 const supported = await isMessagingSupported();
+                console.log("Firebase.ts: Messaging supported:", supported);
+                
                 if (supported) {
                     console.log("Firebase.ts: Messaging is supported. Initializing...");
                     messagingSingleton = getMessaging(app);
-                    console.log("Firebase.ts: Messaging SDK initialized.");
+                    console.log("Firebase.ts: Messaging SDK initialized successfully");
                     resolve(messagingSingleton);
                 } else {
                     console.log("Firebase.ts: Firebase Messaging is not supported by isMessagingSupported().");
@@ -88,50 +93,69 @@ const getInitializedMessaging = (): Promise<Messaging | null> => {
 
 
 export const requestForToken = async (): Promise<string | null> => {
+  console.log("🔔 Firebase.ts: requestForToken called");
+  
   const messaging = await getInitializedMessaging();
   if (!messaging) {
-    console.warn('requestForToken: Firebase Messaging instance is not available.');
+    console.warn('❌ Firebase.ts: requestForToken - Firebase Messaging instance is not available.');
     return null;
   }
 
+  console.log("✅ Firebase.ts: Messaging instance available, proceeding with token request");
+
   const vapidKeyFromServer = "BKm-UFW7sk0sV3T_B1zwflA9LIsX2HaUwLQMgzG_7QrEC6pah0MN5ki8sWqDm4PLnfXtFoS7RNBHhMSyzSpOq_4";
-  console.log("Attempting to get FCM token with VAPID key:", vapidKeyFromServer);
+  console.log("🔔 Firebase.ts: Attempting to get FCM token with VAPID key:", vapidKeyFromServer.substring(0, 20) + "...");
 
   try {
+    console.log("🔔 Firebase.ts: Calling getToken...");
     const currentToken = await getToken(messaging, {
       vapidKey: vapidKeyFromServer
     });
 
     if (currentToken) {
-      console.log('✅ FCM Token:', currentToken);
+      console.log('✅ Firebase.ts: FCM Token obtained successfully!');
+      console.log('🔔 Firebase.ts: Token preview:', currentToken.substring(0, 20) + '...');
       return currentToken;
     } else {
-      console.warn('🚫 Токен авах боломжгүй байна. Notification permission шаардлагатай эсвэл VAPID key буруу байж магадгүй.');
+      console.warn('⚠️ Firebase.ts: No token received. Possible reasons:');
+      console.warn('   - Notification permission not granted');
+      console.warn('   - VAPID key incorrect');
+      console.warn('   - Firebase project configuration issue');
       return null;
     }
   } catch (err) {
-    console.error('❌ FCM токен авахад алдаа гарлаа:', err);
-    if (err instanceof Error && (err.message.includes('InvalidAccessError') || err.message.includes("applicationServerKey is not valid") || err.message.includes("token-subscribe-failed"))) {
-        console.error('❗️ VAPID key эсвэл Google Cloud төслийн тохиргоо (Биллинг, OAuth Consent Screen) буруу байх магадлалтай. Ашиглаж буй VAPID key:', vapidKeyFromServer);
+    console.error('❌ Firebase.ts: Error getting FCM token:', err);
+    if (err instanceof Error) {
+      console.error('❌ Firebase.ts: Error message:', err.message);
+      if (err.message.includes('InvalidAccessError') || err.message.includes("applicationServerKey is not valid") || err.message.includes("token-subscribe-failed")) {
+          console.error('❗️ Firebase.ts: VAPID key or Google Cloud project configuration issue detected');
+          console.error('❗️ Firebase.ts: VAPID key being used:', vapidKeyFromServer.substring(0, 20) + "...");
+      }
     }
     return null;
   }
 };
 
 export const setupOnMessageListener = async (callback: (payload: any) => void): Promise<(() => void) | null> => {
+  console.log("🔔 Firebase.ts: setupOnMessageListener called");
+  
   const messaging = await getInitializedMessaging();
   if (!messaging) {
-    console.warn('setupOnMessageListener: Firebase Messaging instance is not available.');
+    console.warn('❌ Firebase.ts: setupOnMessageListener - Firebase Messaging instance is not available.');
     return null;
   }
+  
+  console.log("✅ Firebase.ts: Setting up onMessage listener");
+  
   try {
     const unsubscribe = onMessage(messaging, (payload) => {
-      console.log('📩 Foreground message received:', payload);
+      console.log('📩 Firebase.ts: Foreground message received:', payload);
       callback(payload);
     });
+    console.log("✅ Firebase.ts: onMessage listener set up successfully");
     return unsubscribe;
   } catch (error) {
-     console.error("Error setting up onMessage listener:", error);
+     console.error("❌ Firebase.ts: Error setting up onMessage listener:", error);
      return null;
   }
 };
